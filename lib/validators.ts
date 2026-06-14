@@ -81,3 +81,25 @@ export const importDriveFolderSchema = z.object({
   driveAccountId: z.string().min(1, "Choose a connected Drive account."),
   folderId: z.string().trim().min(3, "Enter the Drive folder ID.")
 });
+
+export const websiteContentSchema = z.object({
+  heroEyebrow: z.string().trim().min(2, "Enter the hero eyebrow."),
+  heroTitle: z.string().trim().min(3, "Enter the hero title."),
+  heroSubtitle: z.string().trim().min(8, "Enter the hero subtitle."),
+  aboutHeading: z.string().trim().min(3, "Enter the about heading."),
+  aboutParagraph1: z.string().trim().min(20, "Add the first about paragraph."),
+  aboutParagraph2: z.string().trim().min(20, "Add the second about paragraph."),
+  aboutParagraph3: z.string().trim().min(20, "Add the third about paragraph.")
+});
+
+export const studioSettingsSchema = z.object({
+  brandName: z.string().trim().min(2, "Enter the studio name."),
+  tagline: z.string().trim().min(3, "Enter the tagline."),
+  city: z.string().trim().min(2, "Enter the city."),
+  whatsapp: z.string().trim().min(8, "Enter the WhatsApp number."),
+  email: z.string().trim().email("Enter a valid email."),
+  instagram: z.string().trim().min(2, "Enter the Instagram handle."),
+  defaultExpiryDays: z.enum(["0", "30", "90"]),
+  allowDownloadsByDefault: z.enum(["on"]).optional(),
+  publicDomain: z.string().trim().url("Enter a valid public URL.")
+});

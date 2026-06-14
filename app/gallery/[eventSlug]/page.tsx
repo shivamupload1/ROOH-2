@@ -4,7 +4,7 @@ import { verifyGalleryPinAction, toggleFavoriteAction } from "@/app/gallery/[eve
 import { FormField } from "@/components/admin/form-field";
 import { getGallerySession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { brand } from "@/lib/content";
+import { getSiteBrand } from "@/lib/site-content";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +21,7 @@ export default async function GalleryPage({
 }) {
   const { eventSlug } = await params;
   const { error } = await searchParams;
+  const brand = await getSiteBrand();
   const event = await prisma.event.findUnique({
     where: { slug: eventSlug },
     include: {

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { MessageCircle } from "lucide-react";
-import { brand } from "@/lib/content";
+import type { SiteBrand } from "@/lib/site-content";
 
-export function WhatsAppButton() {
+export function WhatsAppButton({ brand }: { brand: SiteBrand }) {
   return (
     <Link
       href={brand.whatsappHref}

@@ -4,7 +4,7 @@ import { AtSign, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { FormField } from "@/components/admin/form-field";
 import { SectionHeading } from "@/components/site/section-heading";
 import { submitInquiryAction } from "@/app/(site)/contact/actions";
-import { brand } from "@/lib/content";
+import { getSiteBrand } from "@/lib/site-content";
 
 export const metadata: Metadata = {
   title: "Contact"
@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 
 export default async function ContactPage({ searchParams }: { searchParams: Promise<{ sent?: string }> }) {
   const { sent } = await searchParams;
+  const brand = await getSiteBrand();
 
   return (
     <main className="px-4 py-16 sm:px-6 lg:px-8">

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Images, MessageCircle } from "lucide-react";
-import { brand, navItems } from "@/lib/content";
+import { navItems } from "@/lib/content";
+import type { SiteBrand } from "@/lib/site-content";
 
-export function Navbar() {
+export function Navbar({ brand }: { brand: SiteBrand }) {
   return (
     <header className="sticky top-0 z-40 border-b border-ink/10 bg-ivory/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">

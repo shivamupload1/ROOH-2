@@ -12,7 +12,9 @@ import {
   driveAccountSchema,
   eventSchema,
   importDriveFolderSchema,
-  mediaFileSchema
+  mediaFileSchema,
+  studioSettingsSchema,
+  websiteContentSchema
 } from "@/lib/validators";
 import { createFolder, importFilesFromFolder } from "@/lib/google-drive";
 
@@ -338,4 +340,128 @@ export async function updateInquiryStatusAction(id: string, formData: FormData) 
   });
 
   revalidatePath("/admin/inquiries");
+}
+
+export async function updateWebsiteContentAction(formData: FormData) {
+  await requireAdminSession();
+  const parsed = websiteContentSchema.parse(Object.fromEntries(formData));
+
+  await Promise.all([
+    prisma.websiteContent.upsert({
+      where: { key: "homeHero" },
+      update: {
+        value: {
+          eyebrow: parsed.heroEyebrow,
+          title: parsed.heroTitle,
+          subtitle: parsed.heroSubtitle
+        }
+      },
+      create: {
+        key: "homeHero",
+        value: {
+          eyebrow: parsed.heroEyebrow,
+          title: parsed.heroTitle,
+          subtitle: parsed.heroSubtitle
+        }
+      }
+    }),
+    prisma.websiteContent.upsert({
+      where: { key: "about" },
+      update: {
+        value: {
+          heading: parsed.aboutHeading,
+          paragraph1: parsed.aboutParagraph1,
+          paragraph2: parsed.aboutParagraph2,
+          paragraph3: parsed.aboutParagraph3
+        }
+      },
+      create: {
+        key: "about",
+        value: {
+          heading: parsed.aboutHeading,
+          paragraph1: parsed.aboutParagraph1,
+          paragraph2: parsed.aboutParagraph2,
+          paragraph3: parsed.aboutParagraph3
+        }
+      }
+    })
+  ]);
+
+  revalidatePath("/");
+  revalidatePath("/about");
+  revalidatePath("/contact");
+  revalidatePath("/client-login");
+  revalidatePath("/admin/content");
+  redirect("/admin/content");
+}
+
+export async function updateStudioSettingsAction(formData: FormData) {
+  await requireAdminSession();
+  const parsed = studioSettingsSchema.parse(Object.fromEntries(formData));
+
+  await Promise.all([
+    prisma.websiteContent.upsert({
+      where: { key: "brand" },
+      update: {
+        value: {
+          name: parsed.brandName,
+          tagline: parsed.tagline,
+          city: parsed.city
+        }
+      },
+      create: {
+        key: "brand",
+        value: {
+          name: parsed.brandName,
+          tagline: parsed.tagline,
+          city: parsed.city
+        }
+      }
+    }),
+    prisma.settings.upsert({
+      where: { key: "contact" },
+      update: {
+        value: {
+          whatsapp: parsed.whatsapp,
+          email: parsed.email,
+          instagram: parsed.instagram
+        }
+      },
+      create: {
+        key: "contact",
+        value: {
+          whatsapp: parsed.whatsapp,
+          email: parsed.email,
+          instagram: parsed.instagram
+        }
+      }
+    }),
+    prisma.settings.upsert({
+      where: { key: "galleryDefaults" },
+      update: {
+        value: {
+          defaultExpiryDays: Number(parsed.defaultExpiryDays),
+          allowDownloadsByDefault: parsed.allowDownloadsByDefault === "on",
+          pinLength: 4,
+          publicDomain: parsed.publicDomain
+        }
+      },
+      create: {
+        key: "galleryDefaults",
+        value: {
+          defaultExpiryDays: Number(parsed.defaultExpiryDays),
+          allowDownloadsByDefault: parsed.allowDownloadsByDefault === "on",
+          pinLength: 4,
+          publicDomain: parsed.publicDomain
+        }
+      }
+    })
+  ]);
+
+  revalidatePath("/");
+  revalidatePath("/about");
+  revalidatePath("/contact");
+  revalidatePath("/client-login");
+  revalidatePath("/admin/settings");
+  redirect("/admin/settings");
 }

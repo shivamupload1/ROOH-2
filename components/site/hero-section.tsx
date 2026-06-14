@@ -1,9 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, MessageCircle } from "lucide-react";
-import { brand } from "@/lib/content";
+import type { HomeHeroContent, SiteBrand } from "@/lib/site-content";
 
-export function HeroSection() {
+export function HeroSection({ brand, hero }: { brand: SiteBrand; hero: HomeHeroContent }) {
   return (
     <section className="relative min-h-[78vh] overflow-hidden bg-ink text-ivory">
       <Image
@@ -17,12 +17,12 @@ export function HeroSection() {
       <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/65 to-ink/10" />
       <div className="relative mx-auto flex min-h-[78vh] max-w-6xl items-center px-4 py-20 sm:px-6 lg:px-8">
         <div className="max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-marigold">{brand.tagline}</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-marigold">{hero.eyebrow}</p>
           <h1 className="mt-5 max-w-3xl text-5xl font-semibold leading-tight text-balance sm:text-6xl lg:text-7xl">
-            Capture Your Wedding Story Forever
+            {hero.title}
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-ivory/82 sm:text-lg">
-            Premium wedding photography, cinematic films, pre-wedding shoots, and private online gallery delivery.
+            {hero.subtitle}
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { AtSign, Mail, MapPin, MessageCircle } from "lucide-react";
-import { brand, navItems } from "@/lib/content";
+import { navItems } from "@/lib/content";
+import type { SiteBrand } from "@/lib/site-content";
 
-export function Footer() {
+export function Footer({ brand }: { brand: SiteBrand }) {
   return (
     <footer className="border-t border-ink/10 bg-ink px-4 py-10 text-ivory sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[1.1fr_0.9fr_0.8fr]">

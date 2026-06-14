@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LockKeyhole, MessageCircle } from "lucide-react";
 import { SectionHeading } from "@/components/site/section-heading";
-import { brand } from "@/lib/content";
+import { getSiteBrand } from "@/lib/site-content";
 
 export const metadata: Metadata = {
   title: "Client Login"
 };
 
-export default function ClientLoginPage() {
+export default async function ClientLoginPage() {
+  const brand = await getSiteBrand();
+
   return (
     <main className="px-4 py-16 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">

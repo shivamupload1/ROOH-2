@@ -5,12 +5,15 @@ import { PackageCard } from "@/components/site/package-card";
 import { PortfolioGrid } from "@/components/site/portfolio-grid";
 import { SectionHeading } from "@/components/site/section-heading";
 import { ServiceCard } from "@/components/site/service-card";
-import { brand, packages, portfolioItems, services } from "@/lib/content";
+import { packages, portfolioItems, services } from "@/lib/content";
+import { getHomeHeroContent, getSiteBrand } from "@/lib/site-content";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const [siteBrand, hero] = await Promise.all([getSiteBrand(), getHomeHeroContent()]);
+
   return (
     <main>
-      <HeroSection />
+      <HeroSection brand={siteBrand} hero={hero} />
 
       <section className="px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
@@ -102,7 +105,7 @@ export default function HomePage() {
                 View Portfolio <ArrowRight size={18} />
               </Link>
               <Link
-                href={brand.whatsappHref}
+                href={siteBrand.whatsappHref}
                 className="inline-flex items-center justify-center gap-2 rounded-md border border-rust px-5 py-3 text-sm font-semibold text-rust"
               >
                 Book on WhatsApp <MessageCircle size={18} />

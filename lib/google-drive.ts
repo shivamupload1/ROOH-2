@@ -3,15 +3,34 @@ import { DriveAccountStatus, MediaType } from "@prisma/client";
 import { google } from "googleapis";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
+import { generateSlug } from "@/lib/slug";
 
 const DRIVE_SCOPES = [
   "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/userinfo.email"
 ];
+const GOOGLE_DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
 
 type OAuthState = {
   driveAccountId: string;
   ts: number;
+};
+
+type DriveListItem = {
+  id?: string | null;
+  name?: string | null;
+  mimeType?: string | null;
+  size?: string | null;
+  thumbnailLink?: string | null;
+  webViewLink?: string | null;
+  webContentLink?: string | null;
+  imageMediaMetadata?: {
+    width?: number | string | null;
+    height?: number | string | null;
+  } | null;
+  videoMediaMetadata?: {
+    durationMillis?: number | string | null;
+  } | null;
 };
 
 function normalizeEnvValue(value?: string) {
@@ -95,6 +114,58 @@ function folderAccessMessage(error: unknown) {
   }
 
   return message || "Google Drive request failed while reading this folder.";
+}
+
+function isFolder(item: Pick<DriveListItem, "mimeType">) {
+  return item.mimeType === GOOGLE_DRIVE_FOLDER_MIME;
+}
+
+function isMediaFile(item: Pick<DriveListItem, "mimeType">) {
+  return Boolean(item.mimeType && (item.mimeType.startsWith("image/") || item.mimeType.startsWith("video/")));
+}
+
+function parseIntOrNull(value?: string | number | null) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseBigIntOrNull(value?: string | number | null) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  try {
+    return BigInt(String(value));
+  } catch {
+    return null;
+  }
+}
+
+function uniqueSlug(baseSlug: string, usedSlugs: Set<string>) {
+  const normalizedBase = baseSlug || "album";
+  let candidate = normalizedBase;
+  let suffix = 2;
+
+  while (usedSlugs.has(candidate)) {
+    candidate = `${normalizedBase}-${suffix}`;
+    suffix += 1;
+  }
+
+  usedSlugs.add(candidate);
+  return candidate;
+}
+
+function mediaMetadataForFile(file: DriveListItem) {
+  return {
+    fileSize: parseBigIntOrNull(file.size),
+    width: parseIntOrNull(file.imageMediaMetadata?.width),
+    height: parseIntOrNull(file.imageMediaMetadata?.height),
+    duration: parseIntOrNull(file.videoMediaMetadata?.durationMillis)
+  };
 }
 
 function encodeState(state: OAuthState) {
@@ -182,6 +253,7 @@ async function authorizedClient(driveAccountId: string) {
 
   const oauth2Client = createOAuthClient();
   const currentAccessToken = account.encryptedAccessToken ? decrypt(account.encryptedAccessToken) : undefined;
+  let accessToken = currentAccessToken;
 
   oauth2Client.setCredentials({
     access_token: currentAccessToken,
@@ -191,6 +263,7 @@ async function authorizedClient(driveAccountId: string) {
 
   try {
     const token = await oauth2Client.getAccessToken();
+    accessToken = token.token || currentAccessToken;
 
     if (token.token && token.token !== currentAccessToken) {
       await prisma.driveAccount.update({
@@ -212,7 +285,11 @@ async function authorizedClient(driveAccountId: string) {
     throw new Error("Google Drive connection expired or was revoked. Reconnect the account and try again.");
   }
 
-  return { account, oauth2Client };
+  if (!accessToken) {
+    throw new Error("Google Drive connection expired or was revoked. Reconnect the account and try again.");
+  }
+
+  return { account, oauth2Client, accessToken };
 }
 
 export async function createFolder(driveAccountId: string, name: string, parentFolderId?: string | null) {
@@ -250,7 +327,7 @@ export async function listFiles(driveAccountId: string, folderId: string) {
       fields: "files(id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,imageMediaMetadata,videoMediaMetadata)"
     });
 
-    return response.data.files || [];
+    return (response.data.files || []) as DriveListItem[];
   } catch (error) {
     throw new Error(folderAccessMessage(error));
   }
@@ -266,10 +343,138 @@ export async function getFileMetadata(driveAccountId: string, fileId: string) {
       fields: "id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,imageMediaMetadata,videoMediaMetadata"
     });
 
-    return response.data;
+    return response.data as DriveListItem;
   } catch (error) {
     throw new Error(folderAccessMessage(error));
   }
+}
+
+async function authorizedFetch(accessToken: string, url: string) {
+  return fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    cache: "no-store"
+  });
+}
+
+function driveMediaUrl(fileId: string) {
+  return `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;
+}
+
+export async function fetchDriveFileAsset(input: {
+  driveAccountId: string;
+  fileId: string;
+  thumbnailUrl?: string | null;
+  preferThumbnail?: boolean;
+  fallbackToMedia?: boolean;
+}) {
+  const { driveAccountId, fileId, thumbnailUrl, preferThumbnail = false, fallbackToMedia = true } = input;
+  const { accessToken } = await authorizedClient(driveAccountId);
+
+  if (preferThumbnail && thumbnailUrl) {
+    const thumbnailResponse = await authorizedFetch(accessToken, thumbnailUrl);
+
+    if (thumbnailResponse.ok) {
+      return thumbnailResponse;
+    }
+
+    if (!fallbackToMedia) {
+      throw new Error(`Google Drive file request failed (${thumbnailResponse.status}).`);
+    }
+  }
+
+  const mediaResponse = await authorizedFetch(accessToken, driveMediaUrl(fileId));
+
+  if (!mediaResponse.ok) {
+    throw new Error(`Google Drive file request failed (${mediaResponse.status}).`);
+  }
+
+  return mediaResponse;
+}
+
+export async function syncEventGalleryFromDrive(eventId: string) {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: {
+      albums: {
+        orderBy: { sortOrder: "asc" }
+      }
+    }
+  });
+
+  if (!event) {
+    throw new Error("Event not found.");
+  }
+
+  if (!event.driveFolderId) {
+    throw new Error("Save the event folder ID first.");
+  }
+
+  const items = await listFiles(event.driveAccountId, event.driveFolderId);
+  const folders = items.filter((item) => isFolder(item) && item.id && item.name);
+  const usedSlugs = new Set(event.albums.map((album) => album.slug));
+  const albumsByFolderId = new Map(
+    event.albums.filter((album) => album.driveFolderId).map((album) => [album.driveFolderId as string, album])
+  );
+  const albumsBySlug = new Map(event.albums.map((album) => [album.slug, album]));
+  const syncedAlbums: Array<{ id: string; name: string; driveFolderId: string }> = [];
+
+  for (const [index, folder] of folders.entries()) {
+    const folderId = folder.id as string;
+    const folderName = folder.name as string;
+    const baseSlug = generateSlug(folderName) || `album-${index + 1}`;
+    const matchedAlbum = albumsByFolderId.get(folderId) || albumsBySlug.get(baseSlug);
+
+    if (matchedAlbum) {
+      await prisma.album.update({
+        where: { id: matchedAlbum.id },
+        data: {
+          name: folderName,
+          driveFolderId: folderId,
+          sortOrder: index + 1
+        }
+      });
+
+      syncedAlbums.push({
+        id: matchedAlbum.id,
+        name: folderName,
+        driveFolderId: folderId
+      });
+      continue;
+    }
+
+    const album = await prisma.album.create({
+      data: {
+        eventId: event.id,
+        name: folderName,
+        slug: uniqueSlug(baseSlug, usedSlugs),
+        sortOrder: index + 1,
+        driveFolderId: folderId
+      }
+    });
+
+    syncedAlbums.push({
+      id: album.id,
+      name: album.name,
+      driveFolderId: folderId as string
+    });
+  }
+
+  const importedRootFiles = await importFilesFromFolder(event.driveAccountId, event.id, null, event.driveFolderId);
+  let importedMediaCount = importedRootFiles.length;
+
+  for (const album of syncedAlbums) {
+    const importedFiles = await importFilesFromFolder(event.driveAccountId, event.id, album.id, album.driveFolderId);
+    importedMediaCount += importedFiles.length;
+  }
+
+  return {
+    albumCount: syncedAlbums.length,
+    mediaCount: importedMediaCount,
+    rootFilesCount: importedRootFiles.length,
+    hasVisibleMedia: items.some((item) => isMediaFile(item))
+  };
 }
 
 export async function importFilesFromFolder(
@@ -288,9 +493,11 @@ export async function importFilesFromFolder(
 
     const mediaType = file.mimeType.startsWith("video/") ? MediaType.VIDEO : MediaType.PHOTO;
 
-    if (!file.mimeType.startsWith("image/") && !file.mimeType.startsWith("video/")) {
+    if (!isMediaFile(file)) {
       continue;
     }
+
+    const metadata = mediaMetadataForFile(file);
 
     const media = await prisma.mediaFile.upsert({
       where: {
@@ -304,10 +511,13 @@ export async function importFilesFromFolder(
         albumId,
         fileName: file.name,
         mimeType: file.mimeType,
-        fileSize: file.size ? BigInt(file.size) : null,
+        fileSize: metadata.fileSize,
         mediaType,
         thumbnailUrl: file.thumbnailLink || null,
-        previewUrl: file.webViewLink || file.webContentLink || null
+        previewUrl: file.webContentLink || file.webViewLink || null,
+        width: metadata.width,
+        height: metadata.height,
+        duration: metadata.duration
       },
       create: {
         eventId,
@@ -316,10 +526,13 @@ export async function importFilesFromFolder(
         driveFileId: file.id,
         fileName: file.name,
         mimeType: file.mimeType,
-        fileSize: file.size ? BigInt(file.size) : null,
+        fileSize: metadata.fileSize,
         mediaType,
         thumbnailUrl: file.thumbnailLink || null,
-        previewUrl: file.webViewLink || file.webContentLink || null
+        previewUrl: file.webContentLink || file.webViewLink || null,
+        width: metadata.width,
+        height: metadata.height,
+        duration: metadata.duration
       }
     });
 

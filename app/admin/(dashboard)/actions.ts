@@ -16,7 +16,7 @@ import {
   studioSettingsSchema,
   websiteContentSchema
 } from "@/lib/validators";
-import { createFolder, importFilesFromFolder } from "@/lib/google-drive";
+import { createFolder, importFilesFromFolder, syncEventGalleryFromDrive } from "@/lib/google-drive";
 
 export async function logoutAction() {
   await clearAdminSession();
@@ -39,6 +39,12 @@ function expiryFromOption(option: "30" | "90" | "none") {
   const date = new Date();
   date.setDate(date.getDate() + Number(option));
   return date;
+}
+
+function eventDriveRedirectPath(id: string, query?: Record<string, string>) {
+  const search = new URLSearchParams(query);
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return `/admin/events/${id}${suffix}`;
 }
 
 async function eventSlug(input: { name: string; slug?: string | null; currentEventId?: string }) {
@@ -227,8 +233,7 @@ export async function createEventDriveFoldersAction(id: string) {
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
-      driveAccount: true,
-      albums: { orderBy: { sortOrder: "asc" } }
+      driveAccount: true
     }
   });
 
@@ -236,32 +241,65 @@ export async function createEventDriveFoldersAction(id: string) {
     redirect("/admin/events");
   }
 
-  const eventFolder = event.driveFolderId
-    ? { id: event.driveFolderId }
-    : await createFolder(event.driveAccountId, event.name, event.driveAccount.rootFolderId);
+  if (!event.driveFolderId) {
+    const folder = await createFolder(event.driveAccountId, event.name, event.driveAccount.rootFolderId);
 
-  if (eventFolder.id && !event.driveFolderId) {
-    await prisma.event.update({
-      where: { id },
-      data: { driveFolderId: eventFolder.id }
-    });
-  }
-
-  for (const album of event.albums) {
-    if (!album.driveFolderId && eventFolder.id) {
-      const folder = await createFolder(event.driveAccountId, album.name, eventFolder.id);
-
-      if (folder.id) {
-        await prisma.album.update({
-          where: { id: album.id },
-          data: { driveFolderId: folder.id }
-        });
-      }
+    if (folder.id) {
+      await prisma.event.update({
+        where: { id },
+        data: { driveFolderId: folder.id }
+      });
     }
   }
 
   revalidatePath(`/admin/events/${id}`);
-  redirect(`/admin/events/${id}`);
+  revalidatePath("/admin/events");
+  redirect(eventDriveRedirectPath(id, { drive: "folder-created" }));
+}
+
+export async function updateEventDriveFolderAction(id: string, formData: FormData) {
+  await requireAdminSession();
+  const driveFolderId = String(formData.get("driveFolderId") || "").trim();
+
+  await prisma.event.update({
+    where: { id },
+    data: { driveFolderId: driveFolderId || null }
+  });
+
+  revalidatePath(`/admin/events/${id}`);
+  revalidatePath("/admin/events");
+  redirect(eventDriveRedirectPath(id, { drive: "folder-saved" }));
+}
+
+export async function syncEventDriveGalleryAction(id: string) {
+  await requireAdminSession();
+  const event = await prisma.event.findUnique({
+    where: { id },
+    select: { slug: true, driveFolderId: true }
+  });
+
+  if (!event) {
+    redirect("/admin/events");
+  }
+
+  if (!event.driveFolderId) {
+    redirect(eventDriveRedirectPath(id, { driveError: "missing-folder" }));
+  }
+
+  try {
+    await syncEventGalleryFromDrive(id);
+  } catch {
+    redirect(eventDriveRedirectPath(id, { driveError: "sync-failed" }));
+  }
+
+  revalidatePath(`/admin/events/${id}`);
+  revalidatePath(`/admin/events/${id}/albums`);
+  revalidatePath("/admin/events");
+  revalidatePath("/admin/albums");
+  revalidatePath("/admin/media");
+  revalidatePath("/admin/galleries");
+  revalidatePath(`/gallery/${event.slug}`);
+  redirect(eventDriveRedirectPath(id, { drive: "sync-complete" }));
 }
 
 export async function createAlbumAction(formData: FormData) {

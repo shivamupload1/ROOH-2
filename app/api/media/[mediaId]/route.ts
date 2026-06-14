@@ -13,8 +13,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     include: { event: true }
   });
 
-  if (!media || !media.event.isPublished || !media.event.downloadAllowed || !media.downloadAllowed) {
-    return new NextResponse("Download not allowed", { status: 403 });
+  if (!media || !media.event.isPublished) {
+    return new NextResponse("Media not found", { status: 404 });
   }
 
   const session = await getGallerySession(media.eventId);
@@ -23,33 +23,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new NextResponse("Gallery PIN required", { status: 401 });
   }
 
-  await prisma.download.create({
-    data: {
-      eventId: media.eventId,
-      mediaFileId: media.id,
-      visitorId: session.visitorId,
-      ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0] || null,
-      userAgent: request.headers.get("user-agent")
-    }
-  });
-
   try {
+    const wantsOriginal = request.nextUrl.searchParams.get("download") === "1";
+    const prefersThumbnail = !wantsOriginal && Boolean(media.thumbnailUrl);
     const assetResponse = await fetchDriveFileAsset({
       driveAccountId: media.driveAccountId,
       fileId: media.driveFileId,
-      preferThumbnail: false
+      thumbnailUrl: media.thumbnailUrl,
+      preferThumbnail: prefersThumbnail,
+      fallbackToMedia: media.mimeType.startsWith("image/")
     });
     const assetBody = await assetResponse.arrayBuffer();
-    const safeFileName = media.fileName.replace(/"/g, "");
 
     return new NextResponse(assetBody, {
       headers: {
         "content-type": assetResponse.headers.get("content-type") || media.mimeType || "application/octet-stream",
-        "content-disposition": `attachment; filename="${safeFileName}"`,
         "cache-control": "private, no-store, max-age=0"
       }
     });
   } catch {
-    return new NextResponse("Could not download this Google Drive file right now.", { status: 502 });
+    return new NextResponse("Could not load this Google Drive file right now.", { status: 502 });
   }
 }

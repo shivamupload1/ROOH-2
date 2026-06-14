@@ -1,0 +1,41 @@
+# dependencies
+node_modules
+.pnp
+.pnp.*
+
+# next
+.next
+out
+
+# production
+build
+dist
+
+# env
+.env
+.env*.local
+
+# prisma
+prisma/dev.db
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# generated artifacts
+outputs
+
+# local Codex validation tooling
+.codex-npm
+.codex-npm.tgz
+.codex-pnpm
+.codex-pnpm.tgz
+.npm-cache
+.pnpm-store
+
+# misc
+.DS_Store
+*.pem

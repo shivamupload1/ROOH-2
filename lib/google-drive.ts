@@ -517,7 +517,8 @@ export async function importFilesFromFolder(
         previewUrl: file.webContentLink || file.webViewLink || null,
         width: metadata.width,
         height: metadata.height,
-        duration: metadata.duration
+        duration: metadata.duration,
+        downloadAllowed: true
       },
       create: {
         eventId,
@@ -532,7 +533,8 @@ export async function importFilesFromFolder(
         previewUrl: file.webContentLink || file.webViewLink || null,
         width: metadata.width,
         height: metadata.height,
-        duration: metadata.duration
+        duration: metadata.duration,
+        downloadAllowed: true
       }
     });
 

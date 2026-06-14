@@ -14,6 +14,9 @@ export default function NewClientPage() {
       <div className="mt-5">
         <p className="text-sm font-semibold uppercase tracking-[0.22em] text-rust">New client</p>
         <h1 className="mt-2 text-3xl font-semibold text-ink">Add Client</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-ink/65">
+          Client save hote hi direct client workspace khulega, jahan se Google account connect, folder create, gallery link, PIN aur sync sab ek hi jagah se hoga.
+        </p>
       </div>
 
       <form action={createClientAction} className="mt-6 grid gap-4 rounded-lg border border-ink/10 bg-white p-6">

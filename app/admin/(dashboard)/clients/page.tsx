@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Edit3, Plus, Trash2 } from "lucide-react";
+import { Edit3, FolderOpen, Plus, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/admin/empty-state";
 import { deleteClientAction } from "@/app/admin/(dashboard)/actions";
 import { prisma } from "@/lib/db";
@@ -61,6 +61,14 @@ export default async function AdminClientsPage() {
                   <td className="px-4 py-3 text-ink/70">{client._count.driveAccounts}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
+                      <Link
+                        href={`/admin/clients/${client.id}`}
+                        className="inline-flex items-center gap-2 rounded-md border border-ink/10 px-3 text-xs font-semibold text-ink transition hover:border-rust hover:text-rust"
+                        title="Open client page"
+                      >
+                        <FolderOpen size={15} />
+                        Open Client Page
+                      </Link>
                       <Link
                         href={`/admin/clients/${client.id}`}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-ink/10 text-ink transition hover:border-rust hover:text-rust"

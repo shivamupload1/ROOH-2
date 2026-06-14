@@ -5,7 +5,7 @@ import { decrypt, encrypt } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
 
 const DRIVE_SCOPES = [
-  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/userinfo.email"
 ];
 
@@ -60,6 +60,41 @@ function signingSecret() {
 
 function sign(value: string) {
   return createHmac("sha256", signingSecret()).update(value).digest("base64url");
+}
+
+function googleErrorMessage(error: unknown) {
+  if (error && typeof error === "object") {
+    const candidate = error as {
+      message?: unknown;
+      response?: { data?: unknown };
+    };
+
+    if (candidate.response?.data && typeof candidate.response.data === "object") {
+      const responseError = candidate.response.data as {
+        error?: { message?: unknown };
+      };
+
+      if (typeof responseError.error?.message === "string") {
+        return responseError.error.message;
+      }
+    }
+
+    if (typeof candidate.message === "string") {
+      return candidate.message;
+    }
+  }
+
+  return "";
+}
+
+function folderAccessMessage(error: unknown) {
+  const message = googleErrorMessage(error);
+
+  if (/invalid|not found|permission|forbidden|insufficient/i.test(message)) {
+    return "Google Drive could not open this folder. Check that the Root folder ID is correct, belongs to this Google account, and reconnect Google after this permission update.";
+  }
+
+  return message || "Google Drive request failed while reading this folder.";
 }
 
 function encodeState(state: OAuthState) {
@@ -181,48 +216,60 @@ async function authorizedClient(driveAccountId: string) {
 }
 
 export async function createFolder(driveAccountId: string, name: string, parentFolderId?: string | null) {
-  const { oauth2Client } = await authorizedClient(driveAccountId);
-  const drive = google.drive({ version: "v3", auth: oauth2Client });
-  const response = await drive.files.create({
-    supportsAllDrives: true,
-    requestBody: {
-      name,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: parentFolderId ? [parentFolderId] : undefined
-    },
-    fields: "id,name"
-  });
+  try {
+    const { oauth2Client } = await authorizedClient(driveAccountId);
+    const drive = google.drive({ version: "v3", auth: oauth2Client });
+    const response = await drive.files.create({
+      supportsAllDrives: true,
+      requestBody: {
+        name,
+        mimeType: "application/vnd.google-apps.folder",
+        parents: parentFolderId ? [parentFolderId] : undefined
+      },
+      fields: "id,name"
+    });
 
-  return response.data;
+    return response.data;
+  } catch (error) {
+    throw new Error(folderAccessMessage(error));
+  }
 }
 
 export async function listFiles(driveAccountId: string, folderId: string) {
-  const { account, oauth2Client } = await authorizedClient(driveAccountId);
-  const drive = google.drive({ version: "v3", auth: oauth2Client });
-  const response = await drive.files.list({
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-    corpora: account.sharedDriveId ? "drive" : "default",
-    driveId: account.sharedDriveId || undefined,
-    q: `'${folderId}' in parents and trashed = false`,
-    pageSize: 100,
-    orderBy: "folder,name_natural",
-    fields: "files(id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,imageMediaMetadata,videoMediaMetadata)"
-  });
+  try {
+    const { account, oauth2Client } = await authorizedClient(driveAccountId);
+    const drive = google.drive({ version: "v3", auth: oauth2Client });
+    const response = await drive.files.list({
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      corpora: account.sharedDriveId ? "drive" : "default",
+      driveId: account.sharedDriveId || undefined,
+      q: `'${folderId}' in parents and trashed = false`,
+      pageSize: 100,
+      orderBy: "folder,name_natural",
+      fields: "files(id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,imageMediaMetadata,videoMediaMetadata)"
+    });
 
-  return response.data.files || [];
+    return response.data.files || [];
+  } catch (error) {
+    throw new Error(folderAccessMessage(error));
+  }
 }
 
 export async function getFileMetadata(driveAccountId: string, fileId: string) {
-  const { oauth2Client } = await authorizedClient(driveAccountId);
-  const drive = google.drive({ version: "v3", auth: oauth2Client });
-  const response = await drive.files.get({
-    fileId,
-    supportsAllDrives: true,
-    fields: "id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,imageMediaMetadata,videoMediaMetadata"
-  });
+  try {
+    const { oauth2Client } = await authorizedClient(driveAccountId);
+    const drive = google.drive({ version: "v3", auth: oauth2Client });
+    const response = await drive.files.get({
+      fileId,
+      supportsAllDrives: true,
+      fields: "id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,imageMediaMetadata,videoMediaMetadata"
+    });
 
-  return response.data;
+    return response.data;
+  } catch (error) {
+    throw new Error(folderAccessMessage(error));
+  }
 }
 
 export async function importFilesFromFolder(

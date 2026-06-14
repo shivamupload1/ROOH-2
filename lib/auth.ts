@@ -35,6 +35,14 @@ function getSessionSecret() {
   return "phase-one-development-session-secret-change-me";
 }
 
+function normalizeEnvValue(value?: string) {
+  if (!value) {
+    return "";
+  }
+
+  return value.trim().replace(/^['"]|['"]$/g, "");
+}
+
 function toBase64Url(value: string) {
   return Buffer.from(value).toString("base64url");
 }
@@ -161,9 +169,10 @@ export async function verifyAdminCredentials(email: string, password: string) {
     }
   }
 
-  const envEmail = (process.env.ADMIN_EMAIL || "admin@roohandrangstories.in").toLowerCase();
-  const envPassword =
-    process.env.ADMIN_PASSWORD || (process.env.NODE_ENV === "production" ? "" : "ChangeMeSoon!");
+  const envEmail = normalizeEnvValue(process.env.ADMIN_EMAIL || "admin@roohandrangstories.in").toLowerCase();
+  const envPassword = normalizeEnvValue(
+    process.env.ADMIN_PASSWORD || (process.env.NODE_ENV === "production" ? "" : "ChangeMeSoon!")
+  );
 
   if (!envPassword || normalizedEmail !== envEmail) {
     return null;
